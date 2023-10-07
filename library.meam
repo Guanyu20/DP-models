@@ -1,0 +1,11 @@
+# meam data from vax files fcc,bcc,dia    11/4/92
+# elt        lat     z       ielement     atwt
+# alpha      b0      b1      b2           b3    alat    esub    asub
+# t0         t1              t2           t3            rozero  ibar
+
+'Ti'        'hcp'   12.     1           47.880
+4.7194566335        2.70    1.0     3.0          1.0   2.92    4.87    0.66
+1.0         6.8             -2.0         -12.0         1.0      3
+'N'         'dim'   1.      1            14.007
+5.96        2.75    4.0     4.0          4.0   1.10    4.88    1.8
+1.0         0.05            1.0          0.0           18.00   3                                 

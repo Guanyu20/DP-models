@@ -1,0 +1,120 @@
+########---------cutting-----------############
+units		metal
+dimension	3
+boundary	p p p
+neighbor	3 bin
+neigh_modify	every 1 delay 0 check yes
+atom_style	atomic
+
+#创建工作盒子------##########
+region          box block 0 213  0 42.6 0 170.4  units box
+create_box      2 box
+
+#########------构建被加工件Ti-----###########
+lattice         hcp 2.95
+region		Ti block 0 118  0 42.6 0 97  units box
+create_atoms	1 region Ti
+
+##########-------构建加工刀具-------########
+lattice           custom 4.26  &
+                  a1    1.0 0.0 0.0  &
+                  a2    0.0 1.0 0.0  &
+                  a3    0.0 0.0 1.0  &
+                  basis 0.0 0.0 0.0  &
+                  basis 0.0 0.5 0.5  &
+                  basis 0.5 0.0 0.5  &
+                  basis 0.5 0.5 0.0  &
+                  basis 0.5 0.5 0.5  &
+                  basis 0.5 0.0 0.0  &
+                  basis 0.0 0.5 0.0  &
+                  basis 0.0 0.0 0.5
+
+#lattice		fcc 2.855324        #TiN涂层刀具
+region		TiN block 129 210 0 42.6  85 136.32 units box
+create_atoms    2 region TiN basis 1 1 basis 2 1 basis 3 1 basis 4 1 &
+                        basis 5 2 basis 6 2 basis 7 2 basis 8 2
+
+region          del1 plane 146.11 0 85 -3 0 -1 units box
+region          del2 plane 129 0 136.32 1 0 0 units box
+region          del intersect 2 del1 del2
+delete_atoms    region del
+region		del11 plane 146.11 0 85 1 0 -3 units box
+region		del22 plane 146.11 0 85 0 0 1 units box
+region		del12 intersect 2 del11 del22
+delete_atoms	region del12
+############--define interatomic potential--################
+pair_style      deepmd TiN_24.pb
+pair_coeff      * * 
+
+mass              1 47.87
+mass              2 14
+
+##########-------设置不同层------############
+
+region		fix1 block 0 8 INF INF INF INF units box
+region		fix2 block INF INF INF INF 0 8 units box
+
+region		fix3 block 129 210 INF INF 128 137 units box
+region		fix4 block 200 210 INF INF 85 137 units box 
+
+region		fix_Ti union 2 fix1 fix2 
+region          fix_TiN union 2 fix3 fix4
+
+#set		region fix type 3 
+
+region		thermo1 block 8 16 INF INF 8 INF units box
+region		thermo2 block 8 INF INF INF 8 16 units box
+
+region		thermo3 block 129 200 INF INF 120 128 units box
+region		thermo4 block 190 200 INF INF 85 120 units box 
+
+region		temp_Ti union 2 thermo1 thermo2
+region          temp_TiN union 2 thermo3 thermo4
+region		temp_layer union 2 temp_Ti temp_TiN
+#set		region thermo type 4
+
+region 		newton_Ti block 16 118 INF INF 16 INF units box
+region          newton_TiN block 135 190  INF INF 85 120 units box
+region		newton_layer union 2 newton_Ti newton_TiN
+#########------设置分区----########
+group 		daoju_fix region fix_TiN
+group 		temp_layer region temp_layer
+group		temp_TiN region temp_TiN
+#group 		fix region fix
+group 		newton_layer region newton_layer
+group          move union temp_layer newton_layer
+#group		move_Ti union temp_Ti newton_Ti
+#group           move_TiN union temp_TiN newton_TiN
+
+compute 	myT temp_TiN temp
+timestep 	0.001
+thermo 		1000
+thermo_modify 	temp myT flush yes
+velocity 	move create 300 5645354 loop local dist gaussian
+#velocity        move_TiN create 300 5645354 loop local dist gaussian
+
+
+fix 		fxnvt move nvt temp 300 300 0.1
+#fix             fxnvt move nvt temp 300 300 0.1
+#assume 	a single Fe atom has volume of 117 A^3
+compute 	myp all stress/atom NULL
+variable 	mypxx atom -c_myp[1]
+variable 	mypyy atom -c_myp[2]
+variable 	mypzz atom -c_myp[3]
+
+dump 		mydump all custom 1000 cutting/cutting.*xyz id type x y z v_mypxx v_mypyy v_mypzz
+restart         50000 restart.*
+run 		50000
+
+unfix 		fxnvt
+fix 		fxnvt temp_layer nvt temp 300 300 0.1
+fix 		fxnve newton_layer nve
+
+fix 		move_TiN daoju_fix move linear -0.5 0 0 units box
+write_data	TiN_Ti.data
+
+dump             atomeye all cfg 1000 dump/cut_TiN.*.cfg  mass type xs ys zs fx fy fz 
+dump_modify      atomeye element Ti N      #输出cfg格式的轨迹文件
+
+run 		250000
+write_restart   restart.struct
